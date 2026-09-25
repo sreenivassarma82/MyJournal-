@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My Journal</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2f5d50">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Journal">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js"></script>
+<style>
+:root{--bg:#faf8f4;--fg:#1f1d1a;--mut:#6f6a62;--card:#fff;--line:#e4dfd6;--acc:#2f5d50;--accfg:#fff;--paper:#fffdf7;--rule:#ebe4d2;--marg:#e0a3a3;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171613;--fg:#ece8df;--mut:#9b958a;--card:#211f1b;--line:#37342e;--acc:#6fb39f;--accfg:#10201b;--paper:#1f1d19;--rule:#2d2a24;--marg:#7a4a4a}}
+:root[data-theme="dark"]{--bg:#171613;--fg:#ece8df;--mut:#9b958a;--card:#211f1b;--line:#37342e;--acc:#6fb39f;--accfg:#10201b;--paper:#1f1d19;--rule:#2d2a24;--marg:#7a4a4a}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 Georgia,'Times New Roman',serif}
+button,input,select{font:inherit;color:inherit}
+header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:10px 12px;border-bottom:1px solid var(--line);z-index:5}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+h1{font-size:18px;margin:0 8px 0 0}
+.grow{flex:1;min-width:120px}
+input,select{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 9px;max-width:100%}
+button{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 11px;cursor:pointer}
+button.p{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+.small{font-size:13px;color:var(--mut)}
+main{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);min-height:calc(100vh - 110px)}
+#list{padding:10px 12px;border-right:1px solid var(--line);overflow-y:auto}
+#ed{padding:12px;display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;cursor:pointer}
+.card.sel{border-color:var(--acc)}.card b{display:block}
+.tag{font-size:12px;color:var(--acc)}
+#up{background:var(--card);border:1px dashed var(--acc);border-radius:10px;padding:8px 11px;margin-bottom:10px}
+#up:empty{display:none}
+#page{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:16px 14px 14px 44px;box-shadow:0 1px 6px rgba(0,0,0,.08)}
+#page::before{content:"";position:absolute;left:32px;top:0;bottom:0;border-left:1px solid var(--marg)}
+#dh{font:italic 400 24px/1.25 Georgia,serif;margin:0 0 4px}
+#body{min-height:50vh;outline:none;overflow-wrap:anywhere;line-height:28px;background:repeating-linear-gradient(transparent 0 27px,var(--rule) 27px 28px) local}
+#body div,#body p{min-height:28px;margin:0}#body h3{margin:0;font-size:18px;line-height:28px}
+.ts{color:var(--acc);font:600 14px system-ui,sans-serif}
+#toast{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));background:var(--acc);color:var(--accfg);padding:10px 14px;border-radius:10px;display:none;z-index:9}
+.mob{display:none}
+@media(max-width:819px){main{grid-template-columns:1fr}#list{border:0}body.editing #list{display:none}body.editing #ed{display:block}.mob{display:inline-block}}
+@media(min-width:820px){#ed.on{display:block}}
+</style></head><body>
+<header>
+ <div class="row"><h1>📓 Journal</h1><input id="q" class="grow" type="search" placeholder="Search any word in any entry…"><button class="p" id="today">Today</button></div>
+ <div class="row" style="margin-top:8px">
+  <select id="fy"></select><select id="fl"></select><select id="ft"><option value="">All types</option><option value="entry">Entries</option><option value="appointment">Appointments</option><option value="reminder">Reminders</option></select>
+  <select id="xs"><option value="view">Export: this view</option><option value="one">Export: open entry</option><option value="all">Export: everything</option></select><button id="xb">⬇ Word</button> <button id="bk" title="Save every entry as a backup file you can restore later, e.g. after moving to a new device or a fresh install">⬇ Backup</button><button id="rs" title="Restore entries from a backup file">⬆ Restore</button><input id="rsf" type="file" accept="application/json" style="display:none">
+ </div>
+ <div class="small" id="mode" style="margin-top:4px"></div>
+<div class="row small" id="fsrow" style="margin-top:6px">
+ <button id="fsChoose">📁 Choose folder…</button>
+ <button id="fsReconnect" style="display:none">🔒 Reconnect folder</button>
+ <button id="fsStop" style="display:none">Stop using folder</button>
+</div>
+<div class="row small" id="odrow" style="margin-top:6px">
+ <button id="odConnect" title="Saves to a private app-only folder in your OneDrive — not your whole drive">☁️ Connect OneDrive</button>
+ <button id="odDisconnect" style="display:none">Disconnect OneDrive</button>
+</div>
+</header>
+<main>
+ <section id="list"><div id="up"></div><div id="items"></div></section>
+ <section id="ed">
+  <div class="row" style="margin-bottom:8px"><button class="mob" id="back">← Entries</button>
+   <button data-c="bold"><b>B</b></button><button data-c="italic"><i>I</i></button><button data-c="underline"><u>U</u></button><button data-c="insertUnorderedList">• List</button><button data-c="formatBlock" data-v="h3">Heading</button><button data-c="undo">↶</button><button id="mic">🎤 Dictate</button></div>
+  <div id="page">
+   <h2 id="dh"></h2>
+   <div id="body" contenteditable="true" spellcheck="true"></div>
+   <details style="margin-top:12px"><summary class="small">Details: date, appointment / reminder, log</summary>
+    <div class="row" style="margin-top:8px"><input id="date" type="date"><select id="type"><option value="entry">Entry</option><option value="appointment">Appointment</option><option value="reminder">Reminder</option></select>
+     <input id="when" type="datetime-local"><input id="log" class="grow" list="logs" placeholder="Log, e.g. Health / Medication"><datalist id="logs"></datalist>
+     <label class="small"><input type="checkbox" id="done"> Done</label></div></details>
+   <div class="row" style="margin-top:8px"><span class="small grow" id="st">Saves automatically as you write</span><button id="del">Delete</button></div>
+  </div>
+ </section>
+</main>
+<div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+let entries=[],cur=null,store=null,timer=null,rec=null,dl=null,dirty=false,started=false,hiddenAt=0,lastActivity=0;const alerted=new Set();
+const nid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const today=()=>new Date().toLocaleDateString('en-CA');
+const plain=h=>{const d=document.createElement('div');d.innerHTML=h||'';return d.textContent};
+function toast(m,ms=5000){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',ms)}
+
+function localStore(){const K='journal:entries';
+ const rd=()=>{try{return JSON.parse(localStorage.getItem(K)||'[]')}catch(e){return[]}};
+ const wr=a=>{try{localStorage.setItem(K,JSON.stringify(a))}catch(e){toast('Could not save on this device')}};
+ return{label:'Saved on this device only (private sync unavailable in this view)',
+  sub(cb){cb(rd())},save(e){const a=rd().filter(x=>x.id!==e.id);a.push(e);wr(a)},del(id){wr(rd().filter(x=>x.id!==id))}}}
+
+function mergeGuard(){
+ const empty=!plain($('#body').innerHTML).trim();
+ if(cur&&empty&&!entries.some(x=>x.id===cur.id)){const real=todayEntry();if(real){open(real,true);return true}}
+ return false}
+
+/* ---- optional: sync to OneDrive (works on Android + desktop; needs a one-time app registration) ---- */
+let usingOneDrive=false;
+const MSAL_CLIENT_ID='a7a9fd63-c793-4852-b8e3-3c867f755497';
+const msalInstance=(window.msal&&MSAL_CLIENT_ID)?new msal.PublicClientApplication({
+ auth:{clientId:MSAL_CLIENT_ID,authority:'https://login.microsoftonline.com/common',redirectUri:location.origin+location.pathname},
+ cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}}):null;
+async function odToken(interactive){
+ if(!msalInstance)throw new Error('OneDrive sign-in isn’t available in this browser view.');
+ const req={scopes:['Files.ReadWrite.AppFolder']},accts=msalInstance.getAllAccounts();
+ if(accts.length){req.account=accts[0];try{return(await msalInstance.acquireTokenSilent(req)).accessToken}catch(e){if(!interactive)throw e}}
+ if(!interactive)throw new Error('not signed in');
+ return(await msalInstance.loginPopup(req)).accessToken}
+const OD_URL='https://graph.microsoft.com/v1.0/me/drive/special/approot:/journal-data.json:/content';
+async function odRead(){const t=await odToken(false).catch(()=>null);if(!t)return[];
+ const r=await fetch(OD_URL,{headers:{Authorization:'Bearer '+t}});
+ if(r.status===404)return[];if(!r.ok)throw new Error('OneDrive read failed ('+r.status+')');
+ const d=await r.json();return Array.isArray(d)?d:Array.isArray(d.entries)?d.entries:[]}
+async function odWrite(list){const t=await odToken(true);
+ const r=await fetch(OD_URL,{method:'PUT',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({app:'journal',version:1,exported:new Date().toISOString(),entries:list})});
+ if(!r.ok)throw new Error('OneDrive save failed ('+r.status+')')}
+function oneDriveStore(){return{label:'Synced to OneDrive (private app folder) — same data on phone and desktop',
+ sub:async cb=>{try{cb(await odRead())}catch(e){toast('OneDrive: '+e.message)}},
+ save:()=>odWrite(entries).catch(e=>toast('OneDrive save failed: '+e.message)),
+ del:()=>odWrite(entries).catch(e=>toast('OneDrive save failed: '+e.message))}}
+async function odConnect(interactive){
+ try{const existing=await odRead(),merged=existing.slice();
+  entries.forEach(le=>{if(!merged.some(x=>x.id===le.id))merged.push(le)});
+  await odWrite(merged);entries=merged;store=oneDriveStore();usingOneDrive=true;usingFolder=false;
+  localStorage.setItem('journal:onedrive-connected','1');$('#mode').textContent=store.label;
+  $('#odConnect').textContent='☁️ OneDrive connected ✓';$('#odDisconnect').style.display='';
+  $('#fsStop')&&($('#fsStop').style.display='none');
+  if(!mergeGuard())render()}
+ catch(e){if(interactive)toast('Could not connect OneDrive: '+e.message)}}
+$('#odConnect').onclick=()=>odConnect(true);
+$('#odDisconnect').onclick=()=>{usingOneDrive=false;localStorage.removeItem('journal:onedrive-connected');
+ try{localStorage.setItem('journal:entries',JSON.stringify(entries))}catch(e){}
+ store=localStore();$('#mode').textContent=store.label;
+ $('#odDisconnect').style.display='none';$('#odConnect').textContent='☁️ Connect OneDrive';
+ toast('Disconnected — your OneDrive file is untouched.')};
+async function odAutoInit(){
+ if(!msalInstance){$('#odConnect').disabled=true;$('#odConnect').title='OneDrive sign-in isn’t available in this browser view.';return}
+ if(localStorage.getItem('journal:onedrive-connected')!=='1')return;
+ await odConnect(false)}
+
+/* ---- optional: save/load from a local folder you choose (File System Access API) ---- */
+let fsHandle=null,usingFolder=false;
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open('journal-fs',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function fsSaveHandle(h){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(h,'dir');tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}catch(e){}}
+async function fsLoadHandle(){try{const db=await idbOpen();return await new Promise(res=>{const tx=db.transaction('kv','readonly');const rq=tx.objectStore('kv').get('dir');rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>res(null)})}catch(e){return null}}
+async function fsClearHandle(){try{const db=await idbOpen();db.transaction('kv','readwrite').objectStore('kv').delete('dir')}catch(e){}}
+async function fsReadFile(handle){try{const fh=await handle.getFileHandle('journal-data.json',{create:true});const text=await(await fh.getFile()).text();if(!text.trim())return[];const data=JSON.parse(text);return Array.isArray(data)?data:Array.isArray(data.entries)?data.entries:[]}catch(e){toast('Could not read the folder file: '+e.message);return[]}}
+async function fsWriteFile(handle,list){const fh=await handle.getFileHandle('journal-data.json',{create:true});const w=await fh.createWritable();await w.write(JSON.stringify({app:'journal',version:1,exported:new Date().toISOString(),entries:list}));await w.close()}
+function folderStore(handle){return{label:'Saving to folder “'+(handle.name||'Journal')+'” on this device',
+ sub:async cb=>cb(await fsReadFile(handle)),save:()=>fsWriteFile(handle,entries),del:()=>fsWriteFile(handle,entries)}}
+async function fsConnect(handle){usingOneDrive=false;const existing=await fsReadFile(handle);const merged=existing.slice();
+ entries.forEach(le=>{if(!merged.some(x=>x.id===le.id))merged.push(le)});
+ await fsWriteFile(handle,merged);entries=merged;store=folderStore(handle);usingFolder=true;
+ $('#mode').textContent=store.label;await fsSaveHandle(handle);if(!mergeGuard())render();
+ $('#fsChoose').textContent='📁 Change folder…';$('#fsStop').style.display='';$('#fsReconnect').style.display='none'}
+async function fsInit(){
+ if(!window.showDirectoryPicker){$('#fsChoose').disabled=true;$('#fsChoose').title='Not supported in this browser — choosing a folder needs Chrome or Edge, opened in its own tab (not embedded).';return}
+ const saved=await fsLoadHandle();if(!saved)return;
+ try{const perm=await saved.queryPermission({mode:'readwrite'});
+  if(perm==='granted'){fsHandle=saved;await fsConnect(saved)}
+  else{fsHandle=saved;$('#fsReconnect').style.display=''}
+ }catch(e){}
+}
+$('#fsChoose').onclick=async()=>{
+ if(!window.showDirectoryPicker)return toast('Choosing a folder isn’t supported in this view — open the app in its own Chrome or Edge tab, not embedded.');
+ try{const handle=await window.showDirectoryPicker({mode:'readwrite'});await fsConnect(handle)}
+ catch(e){if(e.name==='SecurityError')toast('This only works when the app is open on its own — not embedded in another page.');
+  else if(e.name!=='AbortError')toast('Could not access that folder: '+e.message)}};
+$('#fsReconnect').onclick=async()=>{if(!fsHandle)return;
+ try{const perm=await fsHandle.requestPermission({mode:'readwrite'});
+  if(perm==='granted')await fsConnect(fsHandle);else toast('Permission not granted.')}
+ catch(e){toast('Could not reconnect: '+e.message)}};
+$('#fsStop').onclick=async()=>{await fsClearHandle();fsHandle=null;usingFolder=false;
+ try{localStorage.setItem('journal:entries',JSON.stringify(entries))}catch(e){}
+ store=localStore();$('#mode').textContent=store.label;
+ $('#fsStop').style.display='none';$('#fsReconnect').style.display='none';$('#fsChoose').textContent='📁 Choose folder…';
+ toast('Back to on-device storage — your folder file is untouched.')};
+
+async function init(){
+ render();
+ // Open instantly from on-device storage so the app never sits on "Loading…"
+ // waiting on a network permission prompt. Sync upgrades quietly in the background.
+ store=localStore();$('#mode').textContent=store.label;
+ store.sub(a=>{entries=a;started=true;openToday(true);odAutoInit().then(()=>{if(!usingOneDrive)fsInit()})});
+
+ try{
+  const db=await claude.use('db'),u=await claude.use('user'),id=u&&await u.id();
+  try{dl=await claude.use('downloads')}catch(e){}
+  if(!db||!id)return;
+  const base='data/users/'+id+'/entries',before=entries.slice();
+  const dbStore={label:'Synced privately to your account — same data on phone and desktop',
+   sub(cb){db.collection(base).onSnapshot(s=>cb(s.docs.map(d=>({...d.data(),id:d.id}))),()=>toast('Sync error — changes are only saved on this device for now'))},
+   save:e=>db.doc(base+'/'+e.id).set(e),del:i=>db.doc(base+'/'+i).delete()};
+  let migrated=false;
+  dbStore.sub(a=>{if(usingFolder||usingOneDrive)return;entries=a;store=dbStore;$('#mode').textContent=dbStore.label;
+   if(!migrated){migrated=true;before.forEach(le=>{if(!entries.some(x=>x.id===le.id))dbStore.save(le).catch(()=>{})})}
+   if(!mergeGuard())render()});
+ }catch(e){}
+}
+
+function years(){return[...new Set(entries.map(e=>(e.date||'').slice(0,4)).filter(Boolean))].sort().reverse()}
+function logPaths(){const s=new Set();entries.forEach(e=>{const p=(e.log||'').split('/').map(x=>x.trim()).filter(Boolean);p.forEach((_,i)=>s.add(p.slice(0,i+1).join(' / ')))});return[...s].sort()}
+function fill(sel,first,opts){const v=sel.value;sel.innerHTML=`<option value="">${first}</option>`+opts.map(o=>`<option>${o}</option>`).join('');sel.value=opts.includes(v)?v:''}
+function filtered(){const w=$('#q').value.toLowerCase().split(/\s+/).filter(Boolean),y=$('#fy').value,l=$('#fl').value,t=$('#ft').value;
+ return entries.filter(e=>{
+  if(y&&!(e.date||'').startsWith(y))return false;
+  if(t&&e.type!==t)return false;
+  if(l){const p=(e.log||'').split('/').map(x=>x.trim()).filter(Boolean).join(' / ');if(!(p===l||p.startsWith(l+' / ')))return false}
+  const h=((e.title||'')+' '+(e.log||'')+' '+(e.date||'')+' '+plain(e.body)).toLowerCase();
+  return w.every(x=>h.includes(x))
+ }).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.ts||0)-(a.ts||0))}
+function render(){
+ fill($('#fy'),'All years',years());fill($('#fl'),'All logs',logPaths());
+ $('#logs').innerHTML=logPaths().map(o=>`<option value="${o}">`).join('');
+ const list=filtered(),box=$('#items');box.textContent='';
+ if(!list.length){box.innerHTML='<p class="small">No entries yet — start writing on today’s page.</p>'}
+ list.forEach(e=>{const d=document.createElement('div');d.className='card'+(cur&&cur.id===e.id?' sel':'');
+  const b=document.createElement('b');b.textContent=preview(e)||'(empty page)';
+  const m=document.createElement('span');m.className='tag';m.textContent=[e.date,e.type!=='entry'?e.type:'',e.log].filter(Boolean).join(' · ');
+  const s=document.createElement('div');s.className='small';s.textContent='';
+  d.append(b,m,s);d.onclick=()=>open(e);box.append(d)});
+ const now=new Date(),up=entries.filter(e=>e.type!=='entry'&&!e.done&&e.when).sort((a,b)=>a.when.localeCompare(b.when)).slice(0,5),u=$('#up');u.textContent='';
+ if(up.length){const h=document.createElement('b');h.textContent='Upcoming';u.append(h);
+  up.forEach(e=>{const r=document.createElement('div');r.className='small';r.style.cursor='pointer';r.textContent=(new Date(e.when)<now?'⚠ overdue · ':'')+e.when.replace('T',' ')+' — '+(e.title||e.type);r.onclick=()=>open(e);u.append(r)})}
+}
+function caretEnd(){const b=$('#body'),r=document.createRange();r.selectNodeContents(b);r.collapse(false);const g=getSelection();g.removeAllRanges();g.addRange(r)}
+function open(e,autofocus){cur=e;$('#date').value=e.date||today();$('#type').value=e.type||'entry';$('#when').value=e.when||'';
+ $('#log').value=e.log||'';$('#done').checked=!!e.done;$('#body').innerHTML=e.body||'';$('#ed').classList.add('on');document.body.classList.add('editing');dirty=false;$('#st').textContent='Saves automatically as you write';sync();
+ caretEnd();if(autofocus)$('#body').focus();render()}
+function sync(){head();const a=$('#type').value!=='entry';$('#when').style.display=a?'':'none';$('#done').parentElement.style.display=a?'':'none'}
+function snap(){return{...cur,title:'',date:$('#date').value||today(),type:$('#type').value,when:$('#type').value==='entry'?'':$('#when').value,
+ log:$('#log').value.trim(),done:$('#done').checked,body:$('#body').innerHTML,ts:Date.now()}}
+function save(){if(!cur||!dirty)return;clearTimeout(timer);dirty=false;const n=snap(),i=entries.findIndex(x=>x.id===n.id);if(i<0&&!preview(n))return;cur=n;if(i<0)entries.push(n);else entries[i]=n;
+ Promise.resolve(store.save(cur)).then(()=>$('#st').textContent='Saved '+new Date().toLocaleTimeString(),()=>$('#st').textContent='Save failed');render()}
+function later(){dirty=true;lastActivity=Date.now();clearTimeout(timer);$('#st').textContent='Saving…';timer=setTimeout(save,8000)}
+function head(){const d=$('#date').value||today();$('#dh').textContent=new Date(d+'T12:00').toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'})}
+function preview(e){const d=document.createElement('div');d.innerHTML=e.body||'';d.querySelectorAll('.ts').forEach(x=>x.remove());return[...d.childNodes].map(x=>x.textContent).join(' ').replace(/\s+/g,' ').trim()}
+function todayEntry(){return entries.filter(e=>e.daily&&e.date===today()).sort((a,b)=>(a.created||0)-(b.created||0))[0]}
+function stamp(){const b=$('#body');if(!b.textContent.trim())b.innerHTML='';
+ while(b.lastElementChild&&(b.lastElementChild.classList.contains('ts')||!b.lastElementChild.textContent.trim()))b.lastElementChild.remove();
+ const t=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+ b.insertAdjacentHTML('beforeend',(b.innerHTML?'<div><br></div>':'')+'<div class="ts"><b>'+t+'</b></div><div><br></div>');
+ const r=document.createRange();r.selectNodeContents(b.lastElementChild);r.collapse(true);const g=getSelection();g.removeAllRanges();g.addRange(r);b.focus();b.lastElementChild.scrollIntoView({block:'center'})}
+function openToday(autofocus){open(todayEntry()||{id:nid(),date:today(),type:'entry',daily:true,created:Date.now()},autofocus!==false);lastActivity=0}
+document.addEventListener('visibilitychange',()=>{if(document.hidden){hiddenAt=Date.now();save()}else if(hiddenAt&&Date.now()-hiddenAt>18e5){save();openToday()}});
+addEventListener('pagehide',save);$('#body').addEventListener('blur',save);
+$('#today').onclick=()=>{save();openToday()};
+$('#body').addEventListener('focus',()=>{if(!cur)return;if(!lastActivity||Date.now()-lastActivity>3e5)stamp();lastActivity=Date.now()});
+$('#back').onclick=()=>{save();document.body.classList.remove('editing')};
+$('#del').onclick=()=>{if(cur&&confirm('Delete this entry permanently?')){entries=entries.filter(x=>x.id!==cur.id);store.del(cur.id);cur=null;$('#ed').classList.remove('on');document.body.classList.remove('editing');render()}};
+['#date','#type','#when','#log','#done'].forEach(s=>$(s).addEventListener('input',()=>{sync();later()}));
+$('#body').addEventListener('input',later);
+['#q','#fy','#fl','#ft'].forEach(s=>$(s).addEventListener('input',render));
+document.querySelectorAll('[data-c]').forEach(b=>{b.onmousedown=e=>e.preventDefault();b.onclick=()=>{$('#body').focus();document.execCommand(b.dataset.c,false,b.dataset.v||null);later()}});
+
+$('#mic').onclick=()=>{const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!R)return toast('Dictation isn’t available in this browser — use the microphone key on your keyboard.');
+ if(rec){rec.stop();return}
+ rec=new R();rec.continuous=true;rec.interimResults=false;rec.lang=navigator.language||'en-US';
+ rec.onresult=ev=>{for(let i=ev.resultIndex;i<ev.results.length;i++)if(ev.results[i].isFinal){$('#body').focus();document.execCommand('insertText',false,ev.results[i][0].transcript+' ')}later()};
+ rec.onerror=ev=>{toast('Dictation blocked or unavailable ('+ev.error+'). The keyboard mic key still works.')};
+ rec.onend=()=>{rec=null;$('#mic').textContent='🎤 Dictate'};
+ try{rec.start();$('#mic').textContent='⏹ Stop'}catch(e){rec=null}};
+
+/* ---- Word export (.docx built in the page) ---- */
+async function offerFile(filename,blob){
+ if(dl){try{await dl.save({filename,data:blob});toast('Saved '+filename)}catch(e){if(e.code!=='declined')toast('Save failed: '+(e.code||e.message))}return}
+ try{const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);toast('Downloaded '+filename)}
+ catch(e){toast('Download failed: '+e.message)}}
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const run=(t,f={})=>`<w:r><w:rPr>${f.b?'<w:b/>':''}${f.i?'<w:i/>':''}${f.u?'<w:u w:val="single"/>':''}${f.sz?`<w:sz w:val="${f.sz}"/>`:''}</w:rPr><w:t xml:space="preserve">${esc(t)}</w:t></w:r>`;
+const para=r=>`<w:p>${r}</w:p>`;
+function runs(nodes,f){let o='';nodes.forEach(c=>{
+ if(c.nodeType===3)o+=run(c.textContent,f);
+ else if(c.nodeName==='BR')o+='<w:r><w:br/></w:r>';
+ else{const t=c.nodeName,g={...f};if(/^(B|STRONG|H\d)$/.test(t))g.b=1;if(/^(I|EM)$/.test(t))g.i=1;if(t==='U')g.u=1;o+=runs([...c.childNodes],g)}});return o}
+function paras(html){const d=document.createElement('div');d.innerHTML=html||'';let o='',buf=[];
+ const flush=()=>{if(buf.length){o+=para(runs(buf,{}));buf=[]}};
+ [...d.childNodes].forEach(c=>{
+  if(c.nodeType===3||/^(B|I|U|STRONG|EM|SPAN|A|BR)$/.test(c.nodeName))buf.push(c);
+  else if(/^(UL|OL)$/.test(c.nodeName)){flush();c.querySelectorAll('li').forEach(li=>o+=para(run('•  ')+runs([...li.childNodes],{})))}
+  else{flush();o+=para(runs([...c.childNodes],/^H\d/.test(c.nodeName)?{b:1}:{}))}});
+ flush();return o}
+async function makeDocx(list,name){ // eslint-disable-line
+ const body=list.map(e=>para(run(preview(e).slice(0,80)||'(untitled)',{b:1,sz:30}))+para(run([e.date,e.type!=='entry'?e.type+(e.when?' '+e.when.replace('T',' '):''):'',e.log].filter(Boolean).join('  ·  '),{i:1,sz:20}))+paras(e.body)+para('')).join('')
+  ||para(run('No entries.'));
+ const z=new JSZip(),W='http://schemas.openxmlformats.org/';
+ z.file('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="${W}package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+ z.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${W}package/2006/relationships"><Relationship Id="rId1" Type="${W}officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+ z.file('word/document.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W}wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`);
+ const blob=await z.generateAsync({type:'blob'});
+ await offerFile(name+'.docx',blob)}
+$('#xb').onclick=()=>{const s=$('#xs').value;let l,n='Journal';
+ if(s==='one'){if(!cur)return toast('Open an entry first.');save();l=[cur];n=(preview(cur).slice(0,40)||cur.date||'Entry').replace(/[^\w -]/g,'')}
+ else if(s==='all'){l=[...entries].sort((a,b)=>(a.date||'').localeCompare(b.date||''));n='Journal-all'}
+ else{l=filtered().reverse();n='Journal-'+([$('#fy').value,$('#fl').value.replace(/[^\w]+/g,'-')].filter(Boolean).join('-')||'view')}
+ makeDocx(l,n)};
+
+$('#bk').onclick=async()=>{save();const blob=new Blob([JSON.stringify({app:'journal',version:1,exported:new Date().toISOString(),entries},null,0)],{type:'application/json'});
+ await offerFile('journal-backup-'+today()+'.json',blob)};
+$('#rs').onclick=()=>$('#rsf').click();
+$('#rsf').addEventListener('change',async()=>{const f=$('#rsf').files[0];if(!f)return;$('#rsf').value='';
+ let data;try{data=JSON.parse(await f.text())}catch(e){return toast('That file isn’t a valid backup.')}
+ const list=Array.isArray(data)?data:Array.isArray(data.entries)?data.entries:null;
+ if(!list)return toast('That file isn’t a valid backup.');
+ if(!confirm('Restore '+list.length+' entries from this backup? Entries with the same id will be overwritten; nothing else is deleted.'))return;
+ for(const e of list){if(!e||!e.id)continue;const i=entries.findIndex(x=>x.id===e.id);if(i<0)entries.push(e);else entries[i]=e;try{await store.save(e)}catch(err){}}
+ render();toast('Restored '+list.length+' entries')});
+
+setInterval(()=>{const now=new Date();entries.forEach(e=>{if(e.type!=='entry'&&!e.done&&e.when&&new Date(e.when)<=now&&!alerted.has(e.id)){alerted.add(e.id);toast('⏰ '+(e.title||e.type),12000)}})},30000);
+init();
+</script></body></html>
